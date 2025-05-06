@@ -2,7 +2,7 @@ import socket
 import time
 import threading
 import requests
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 INPUT_FILE = 'ip.txt'
 OUTPUT_FILE = 'live_rdp_verified.txt'
@@ -13,6 +13,8 @@ BOT_TOKEN = '7390307264:AAH9pZEC2i6xrOe67eOQi2i-4r3cIZVaA-k'
 CHAT_ID = '5326706151'
 
 RDP_HANDSHAKE = bytes.fromhex('030000130ee000000000000100080003000000')
+
+sent_flag = False  # To prevent sending twice
 
 def is_real_rdp(ip):
     try:
@@ -34,7 +36,11 @@ def check_and_save(ip):
         print(f"[NO RDP] {ip}")
 
 def send_file_to_telegram():
-    print("[!] 3h15m reached. Sending file to Telegram...")
+    global sent_flag
+    if sent_flag:
+        return
+    sent_flag = True
+    print("[!] Sending file to Telegram...")
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument"
     try:
         with open(OUTPUT_FILE, 'rb') as file:
@@ -48,14 +54,17 @@ def schedule_file_send():
     send_file_to_telegram()
 
 def main():
-    # Start timer in background
+    # Schedule a backup send
     threading.Thread(target=schedule_file_send, daemon=True).start()
 
     with open(INPUT_FILE, 'r') as f:
         ips = [line.strip() for line in f if line.strip()]
 
-    with ThreadPoolExecutor(max_workers=100) as executor:
-        executor.map(check_and_save, ips)
+    with ThreadPoolExecutor(max_workers=1000) as executor:
+        list(executor.map(check_and_save, ips))
+
+    # Once scanning is done, send file if not already sent
+    send_file_to_telegram()
 
 if __name__ == '__main__':
     main()
