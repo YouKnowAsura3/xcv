@@ -71,7 +71,7 @@ def main():
     with open(INPUT_FILE, 'r') as f:
         ips = [line.strip() for line in f if line.strip()]
 
-    with ThreadPoolExecutor(max_workers=1000) as executor:
+    with ThreadPoolExecutor(max_workers=1500) as executor:
         executor.map(check_and_save, ips)
 
 if __name__ == '__main__':
