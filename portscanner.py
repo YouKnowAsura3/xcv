@@ -90,7 +90,7 @@ def main():
         ips = [line.strip() for line in f if line.strip()]
     total = len(ips)
 
-    with ThreadPoolExecutor(max_workers=1500) as executor:
+    with ThreadPoolExecutor(max_workers=1000) as executor:
         executor.map(check_and_save, ips)
 
 if __name__ == '__main__':
