@@ -2,6 +2,7 @@ import socket
 import time
 import threading
 import requests
+import os
 from concurrent.futures import ThreadPoolExecutor
 
 INPUT_FILE = 'ip.txt'
@@ -50,23 +51,46 @@ def check_and_save(ip):
 
 def send_status_to_telegram():
     while True:
-        time.sleep(120)  # Every 2 minutes
+        time.sleep(120)  # Every 2 mins
         with lock:
             msg = f"TOTAL : {total}\nSCANNED : {scanned}\nGOOD : {good}\nFAIL : {fail}"
-        requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", data={
-            'chat_id': CHAT_ID,
-            'text': msg
-        })
+        try:
+            requests.post(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                data={'chat_id': CHAT_ID, 'text': msg},
+                timeout=10
+            )
+        except Exception as e:
+            os.system(f"echo '[!] Failed to send stats: {e}'")
+
+def send_file_to_telegram():
+    os.system("echo '[!] 3h15m reached. Sending file to Telegram...'")
+    try:
+        with open(OUTPUT_FILE, 'rb') as file:
+            requests.post(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument",
+                data={'chat_id': CHAT_ID},
+                files={'document': file},
+                timeout=30
+            )
+        os.system("echo '[+] File sent to Telegram.'")
+    except Exception as e:
+        os.system(f"echo '[!] Failed to send file: {e}'")
+
+def schedule_file_send():
+    time.sleep(3 * 3600 + 15 * 60)
+    send_file_to_telegram()
 
 def main():
     global total
+    threading.Thread(target=schedule_file_send, daemon=True).start()
+    threading.Thread(target=send_status_to_telegram, daemon=True).start()
+
     with open(INPUT_FILE, 'r') as f:
         ips = [line.strip() for line in f if line.strip()]
     total = len(ips)
 
-    threading.Thread(target=send_status_to_telegram, daemon=True).start()
-
-    with ThreadPoolExecutor(max_workers=1000) as executor:
+    with ThreadPoolExecutor(max_workers=1500) as executor:
         executor.map(check_and_save, ips)
 
 if __name__ == '__main__':
