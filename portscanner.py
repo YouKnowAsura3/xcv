@@ -96,7 +96,7 @@ def main():
 
     os.system(f"echo '[!] Total IPs: {total}'")
 
-    with ThreadPoolExecutor(max_workers=200) as executor:
+    with ThreadPoolExecutor(max_workers=50) as executor:
         executor.map(check_and_save, ips)
 
 if __name__ == '__main__':
