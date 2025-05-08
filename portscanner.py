@@ -2,6 +2,7 @@ import time
 import threading
 import requests
 import subprocess
+import os
 from concurrent.futures import ThreadPoolExecutor
 
 INPUT_FILE = 'ip.txt'
@@ -13,6 +14,7 @@ lock = threading.Lock()
 total_ips = 0
 scanned = 0
 good = 0
+bad = 0
 
 def is_windows_rdp(ip):
     try:
@@ -26,53 +28,55 @@ def is_windows_rdp(ip):
         return False
 
 def check_and_save(ip):
-    global scanned, good
-    subprocess.run(['echo', f'[SCAN] {ip} - checking if Windows RDP...'])
+    global scanned, good, bad
+    os.system(f'echo "[SCAN] {ip} - checking if Windows RDP..."')
     if is_windows_rdp(ip):
-        subprocess.run(['echo', f'[WIN-RDP] {ip}'])
+        os.system(f'echo "[WIN-RDP] {ip}"')
         with lock:
             with open(OUTPUT_FILE, 'a+') as f:
                 f.seek(0)
                 if ip not in f.read():
                     f.write(ip + '\n')
-                    good += 1
+            good += 1
     else:
-        subprocess.run(['echo', f'[NOT Windows] {ip}'])
+        os.system(f'echo "[NOT Windows] {ip}"')
+        with lock:
+            bad += 1
     with lock:
         scanned += 1
 
-def status_updater():
+def send_status_update():
     while True:
         time.sleep(120)
         with lock:
-            bad = scanned - good
-            subprocess.run(['echo', f'SCANNED : {scanned}'])
-            subprocess.run(['echo', f'GOOD    : {good}'])
-            subprocess.run(['echo', f'BAD     : {bad}'])
-            subprocess.run(['echo', f'TOTAL   : {total_ips}'])
+            message = f"SCANNED: {scanned}\nGOOD: {good}\nBAD: {bad}\nTOTAL: {total_ips}"
+        requests.post(
+            f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage',
+            data={'chat_id': CHAT_ID, 'text': message}
+        )
 
 def send_file_to_telegram():
-    subprocess.run(['echo', '[!] 3h15m reached. Sending file to Telegram...'])
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument"
+    time.sleep(3 * 3600 + 15 * 60)
+    os.system('echo "[!] 3h15m reached. Sending file to Telegram..."')
     try:
         with open(OUTPUT_FILE, 'rb') as file:
-            requests.post(url, data={'chat_id': CHAT_ID}, files={'document': file})
-        subprocess.run(['echo', '[+] File sent to Telegram.'])
+            requests.post(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument",
+                data={'chat_id': CHAT_ID},
+                files={'document': file}
+            )
+        os.system('echo "[+] File sent to Telegram."')
     except Exception as e:
-        subprocess.run(['echo', f'[!] Failed to send file: {e}'])
-
-def schedule_file_send():
-    time.sleep(3 * 3600 + 15 * 60)
-    send_file_to_telegram()
+        os.system(f'echo "[!] Failed to send file: {e}"')
 
 def main():
     global total_ips
-    threading.Thread(target=schedule_file_send, daemon=True).start()
-    threading.Thread(target=status_updater, daemon=True).start()
+    threading.Thread(target=send_file_to_telegram, daemon=True).start()
+    threading.Thread(target=send_status_update, daemon=True).start()
 
     with open(INPUT_FILE, 'r') as f:
         ips = [line.strip() for line in f if line.strip()]
-        total_ips = len(ips)
+    total_ips = len(ips)
 
     with ThreadPoolExecutor(max_workers=100) as executor:
         executor.map(check_and_save, ips)
