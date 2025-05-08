@@ -43,14 +43,14 @@ def check_and_save(ip):
                 f.seek(0)
                 if ip not in f.read():
                     f.write(ip + '\n')
-            os.system(f"echo '[GOOD] {ip}'")
+            os.system(f"echo '[GOOD] '")
     else:
         with lock:
             fail += 1
-        os.system(f"echo '[FAIL] {ip}'")
+        os.system(f"echo '[FAIL]'")
     with lock:
         scanned += 1
-    os.system(f"echo '[SCANNED] {ip}'")
+    os.system(f"echo '[SCANNED]'")
 
 def send_status_to_telegram():
     while True:
