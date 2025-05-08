@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 INPUT_FILE = 'ip.txt'
 OUTPUT_FILE = 'live_rdp_verified.txt'
-BOT_TOKEN = '7390307264:AAH9pZEC2i6xrOe67eOQi2i-4r3cIZVaA-k'
+BOT_TOKEN = '7691507387:AAEl81yaGi3Te1KOqOtBqPahu_fjzXljQs4'
 CHAT_ID = '5326706151'
 
 lock = threading.Lock()
