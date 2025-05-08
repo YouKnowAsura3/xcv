@@ -59,7 +59,7 @@ def main():
     with open(INPUT_FILE, 'r') as f:
         ips = [line.strip() for line in f if line.strip()]
 
-    with ThreadPoolExecutor(max_workers=800) as executor:
+    with ThreadPoolExecutor(max_workers=100) as executor:
         executor.map(is_ssh_accessible, ips)
 
 if __name__ == '__main__':
