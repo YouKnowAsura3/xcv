@@ -43,11 +43,14 @@ def check_and_save(ip):
                 f.seek(0)
                 if ip not in f.read():
                     f.write(ip + '\n')
+            os.system(f"echo '[GOOD] {ip}'")
     else:
         with lock:
             fail += 1
+        os.system(f"echo '[FAIL] {ip}'")
     with lock:
         scanned += 1
+    os.system(f"echo '[SCANNED] {ip}'")
 
 def send_status_to_telegram():
     while True:
@@ -60,6 +63,7 @@ def send_status_to_telegram():
                 data={'chat_id': CHAT_ID, 'text': msg},
                 timeout=10
             )
+            os.system("echo '[+] Stats sent to Telegram'")
         except Exception as e:
             os.system(f"echo '[!] Failed to send stats: {e}'")
 
@@ -90,7 +94,9 @@ def main():
         ips = [line.strip() for line in f if line.strip()]
     total = len(ips)
 
-    with ThreadPoolExecutor(max_workers=100) as executor:
+    os.system(f"echo '[!] Total IPs: {total}'")
+
+    with ThreadPoolExecutor(max_workers=1000) as executor:
         executor.map(check_and_save, ips)
 
 if __name__ == '__main__':
